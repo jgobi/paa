@@ -1,91 +1,81 @@
-// TODO: fazer funcionar para o caso do exemplo 1447.test (udebug)
-
 #include <iostream>
-#include <vector>
+#include <unordered_map>
 #include <queue>
 #include <cstring>
  
 using namespace std;
 
-const int maxv = 100;
+const int maxv = 105;
+const int maxa = 5005;
+const int maxv_d = maxv + maxa;
 
-vector<int> arestas[maxv + 5];
-vector<int> preco[maxv + 5];
+// v[i]:  map<dest, <preco,  capacidade>>
+unordered_map<int, pair<int, int>> arestas[maxv_d];
+unordered_map<int, pair<int, int>> arestas_r[maxv_d];
 
-int cadeiras[maxv + 5][maxv + 5];
+int preco[maxv_d];
+int marca[maxv_d];
+int pai[maxv_d];
 
-int marca[maxv + 5];
-int dist[maxv + 5]; // preço total da viagem de s para cada vértice
-int pai[maxv + 5];
-
-void limpa_grafo_instancia() {
-    // limpeza das cadeiras feita implicitamente na inicialização de cadeitas.
-    for (int i = 0; i < maxv + 5; i++) {
-        arestas[i].clear();
-        preco[i].clear();
-    }
-}
-
-void limpa_grafo_caminho() {
+void limpa_caminho() {
+    memset(preco, -1, sizeof(preco)); // infinito
     memset(marca, 0, sizeof(marca));
     memset(pai, 0, sizeof(pai));
-    for (int i = 0; i < maxv + 5; i++) {
-        dist[i] = -1; // infinito
+}
+
+void limpa_grafo() {
+    for(int i = 0; i < maxv_d; i++) {
+        arestas[i].clear();
+        arestas_r[i].clear();
     }
 }
 
 void recebe_arestas(int n_arestas) {
-    while(n_arestas--) {
+    for (int i = 1; i <= n_arestas; i++) {
         int u, v, p;
         cin >> u >> v >> p;
 
-        arestas[u].push_back(v);
-        preco[u].push_back(p);
-
-        arestas[v].push_back(u);
-        preco[v].push_back(p);
+        // converte em direcionado
+        arestas[u].insert(make_pair(v, make_pair(p, 0)));
+        arestas[v].insert(make_pair(maxv + i, make_pair(p, 0)));
+        arestas[maxv + i].insert(make_pair(u, make_pair(0, 0)));
     }
 }
 
-void inicializa_cadeiras(int n_vertices, int n_cadeiras) {
-    for (int i = 1; i <= n_vertices; i++) {
-        for (int j = 0; j < arestas[i].size(); j++) {
-            cadeiras[i][arestas[i][j]] = n_cadeiras;
+void init_capacidades(int n_vertices, int n_arestas, int cap) {
+    for (int u = 1; u <= n_vertices; u++) {
+        for (auto it = arestas[u].begin(); it != arestas[u].end(); it++) {
+            int v = it->first;
+            int p = it->second.first;
+            it->second.second = cap;
+
+            // residual
+            arestas_r[u].insert(make_pair(v, make_pair(p, cap)));
+            arestas_r[v].insert(make_pair(u, make_pair(p, 0)));
+        }
+    }
+
+    for (int u = maxv + 1; u <= maxv + n_arestas; u++) {
+        for (auto it = arestas[u].begin(); it != arestas[u].end(); it++) {
+            int v = it->first;
+            int p = it->second.first;
+            it->second.second = cap;
+
+            // residual
+            arestas_r[u].insert(make_pair(v, make_pair(p, cap)));
+            arestas_r[v].insert(make_pair(u, make_pair(p, 0)));
         }
     }
 }
 
-int conta_viagens(int s, int e, int max_viagens) {
-    int n_viagens = max_viagens;
-    int p = e;
-    do {
-        int pp = pai[p];
-        n_viagens = min(n_viagens, cadeiras[pp][p]);
-        p = pp;
-    } while (p != s && p != 0 && n_viagens != 0);
-
-    return n_viagens;
-}
-
-void atualiza_cadeiras(int s, int e, int decremento) {
-    int p = e;
-    do {
-        int pp = pai[p];
-        cadeiras[pp][p] -= decremento;
-        cadeiras[p][pp] -= decremento;
-        p = pp;
-    } while (p != s && p != 0);
-}
-
-int dijkstra_v(int s, int e) {
+int djikstra(int s, int t) {
     priority_queue<pair<int, int>> q; // -peso, n_vertice
 
-    dist[s] = 0;
-    q.push(make_pair(-dist[s], s));
+    preco[s] = 0;
+    q.push(make_pair(-preco[s], s));
 
     while (!q.empty()) {
-        int p_v, v;
-
+        int v, p_v;
         do {
             pair<int, int> q_top = q.top();
             p_v = -q_top.first;
@@ -96,56 +86,89 @@ int dijkstra_v(int s, int e) {
         // não encontrou desmarcado, fila vazia, fim do algoritmo.
         if (marca[v]) break;
 
-        for (int i = 0; i < arestas[v].size(); i++) {
-            int w = arestas[v][i];
-            int p_vw = preco[v][i];
-            if (cadeiras[v][w] > 0 && (dist[w] == -1 || dist[w] > dist[v] + p_vw)) {
-                dist[w] = dist[v] + p_vw;
-                q.push(make_pair(-dist[w], w));
+        marca[v] = 1;
+
+        for (auto it = arestas_r[v].begin(); it != arestas_r[v].end(); it++) {
+            int w = it->first;
+            int p_vw = it->second.first;
+            int c_vw = it->second.second;
+            if (c_vw > 0 && (preco[w] == -1 || preco[w] > preco[v] + p_vw)) {
+                preco[w] = preco[v] + p_vw;
+                q.push(make_pair(-preco[w], w));
                 pai[w] = v;
             }
         }
     }
 
-    return dist[e];
+    return preco[t] != -1; // se preço de t < infinito, achou caminho.
+}
+
+int capacidade_caminho(int s, int t, int max_v) {
+    int capacidade = max_v;
+    for (int f = t, p = pai[f]; p > 0; f = p, p = pai[f]) {
+        int c_pf = arestas_r[p][f].second;
+        if (c_pf < capacidade) {
+            capacidade = c_pf;
+        }
+    }
+
+    return capacidade;
+}
+
+int atualiza_capacidades(int s, int t, int cap) {
+    int inc_custo = 0;
+
+    for (int f = t, p = pai[f]; p > 0; f = p, p = pai[f]) {
+        auto e_pf = arestas_r[p].find(f);
+        auto e_fp = arestas_r[f].find(p);
+        int p_pf = e_pf->second.first;
+        if (arestas[p].find(f) != arestas[p].end()) { // aresta real
+            inc_custo += p_pf * cap;
+        } else { // aresta residual
+            inc_custo -= p_pf * cap;
+        }
+        
+        // atualiza grafo residual
+        e_pf->second.second -= cap;
+        e_fp->second.second += cap;
+    }
+
+    return inc_custo;
 }
 
 int main() {
-    int n_vertices, n_arestas, n_amigos, n_cadeiras;
+    int n_vertices, n_arestas, qtd_fluxo, capacidade;
 
-    int n_instancia = 1;
-    while (cin >> n_vertices) {
+    for (int n_instancia = 1; cin >> n_vertices; n_instancia++) {
         cin >> n_arestas;
-
-        limpa_grafo_instancia();
+        
+        limpa_grafo();
         recebe_arestas(n_arestas);
 
-        cin >> n_amigos >> n_cadeiras;
-        inicializa_cadeiras(n_vertices, n_cadeiras);
+        cin >> qtd_fluxo >> capacidade;
 
+        init_capacidades(n_vertices, n_arestas, capacidade);
+        
         cout << "Instancia " << n_instancia << endl;
 
-        int amigos_restantes = n_amigos;
-        int valor = 0;
-        while (amigos_restantes > 0) {
-            limpa_grafo_caminho();
-            int custo_viagem = dijkstra_v(1, n_vertices);
-            int n_viagens = conta_viagens(1, n_vertices, amigos_restantes);
-            if (n_viagens == 0) break; // impossível
-            atualiza_cadeiras(1, n_vertices, n_viagens);
-            valor += n_viagens * custo_viagem;
-            amigos_restantes -= n_viagens;
+        int custo_total = 0;
+        int fluxo_atual = 0;
+        while (fluxo_atual < qtd_fluxo) {
+            limpa_caminho();
+            int achou = djikstra(1, n_vertices);
+            if (!achou) break;
 
-            cout << "> " << n_viagens << " * $" << custo_viagem << ": (+)$" << n_viagens * custo_viagem << " (=$" << valor << ")" << endl << flush;
+            int cap_caminho = capacidade_caminho(1, n_vertices, qtd_fluxo - fluxo_atual);
+            fluxo_atual += cap_caminho;
+            int custo_atual = atualiza_capacidades(1, n_vertices, cap_caminho);
+            custo_total += custo_atual;
         }
 
-        if (amigos_restantes > 0) {
+        if (fluxo_atual < qtd_fluxo) {
             cout << "impossivel" << endl << endl;
         } else {
-            cout << valor << endl << endl;
+            cout << custo_total << endl << endl;
         }
-
-        n_instancia++;
     }
     return 0;
 }
